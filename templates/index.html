@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Soil Moisture</title>
+  <script src="/static/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f1117;
+      color: #f0f0f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      padding: 18px 28px 10px;
+      flex-shrink: 0;
+    }
+
+    h1 {
+      font-size: 1.2rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #888;
+    }
+
+    #current {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #4ecb6a;
+    }
+
+    #current span {
+      font-size: 1rem;
+      font-weight: 400;
+      color: #aaa;
+    }
+
+    .chart-wrap {
+      flex: 1;
+      padding: 0 20px 16px;
+      min-height: 0;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    footer {
+      text-align: center;
+      padding: 8px;
+      font-size: 0.8rem;
+      color: #444;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #444;
+      flex-shrink: 0;
+    }
+    .dot.live  { background: #3a9e4a; animation: pulse 2s infinite; }
+    .dot.error { background: #c03a3a; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🪴 Soil Moisture</h1>
+    <div>
+      <div style="font-size:0.75rem;color:#666;text-align:right;margin-bottom:2px;">AVG</div>
+      <div id="current">--<span> %</span></div>
+    </div>
+  </header>
+
+  <div class="chart-wrap">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <footer>
+    <div class="dot" id="dot"></div>
+    <span id="status-text">Connecting&hellip;</span>
+  </footer>
+
+  <script>
+    const REFRESH_MS = 3000;
+
+    const ctx = document.getElementById("chart").getContext("2d");
+
+    const chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: [],
+        datasets: [{
+          label: "Moisture",
+          data: [],
+          borderColor: "#4ecb6a",
+          backgroundColor: "rgba(78, 203, 106, 0.12)",
+          borderWidth: 2.5,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          pointBackgroundColor: "#4ecb6a",
+          fill: true,
+          tension: 0.3,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: "#1a1f2e",
+            titleColor: "#888",
+            bodyColor: "#4ecb6a",
+            bodyFont: { size: 16, weight: "bold" },
+            padding: 12,
+            callbacks: {
+              label: ctx => ctx.parsed.y.toFixed(1) + " %"
+            }
+          }
+        },
+        scales: {
+          x: {
+            title: {
+              display: true,
+              text: "Reading ID",
+              color: "#666",
+              font: { size: 13 }
+            },
+            ticks: { color: "#666", maxTicksLimit: 10 },
+            grid: { color: "rgba(255,255,255,0.05)" }
+          },
+          y: {
+            title: {
+              display: true,
+              text: "Moisture (%)",
+              color: "#666",
+              font: { size: 13 }
+            },
+            ticks: {
+              color: "#666",
+              callback: v => v + " %"
+            },
+            grid: { color: "rgba(255,255,255,0.05)" }
+          }
+        }
+      }
+    });
+
+    async function refresh() {
+      let errorMsg = "no data — check connection";
+      try {
+        const res = await fetch("/api/history");
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorMsg = data.error || errorMsg;
+          throw new Error(errorMsg);
+        }
+
+        chart.data.labels = data.map(r => r.id);
+        chart.data.datasets[0].data = data.map(r => parseFloat(r.value));
+        chart.update();
+
+        const values = data.map(r => parseFloat(r.value));
+        const avg = values.length
+          ? values.reduce((a, b) => a + b, 0) / values.length
+          : null;
+        document.getElementById("current").innerHTML =
+          (avg == null ? "--" : avg.toFixed(1)) + "<span> %</span>";
+
+        document.getElementById("dot").className = "dot live";
+        document.getElementById("status-text").textContent =
+          data.length + " reading" + (data.length !== 1 ? "s" : "");
+      } catch (e) {
+        document.getElementById("dot").className = "dot error";
+        document.getElementById("status-text").textContent = "Error: " + errorMsg;
+      }
+    }
+
+    refresh();
+    setInterval(refresh, REFRESH_MS);
+  </script>
+</body>
+</html>

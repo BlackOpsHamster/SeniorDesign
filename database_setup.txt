@@ -1,0 +1,80 @@
+DATABASE SETUP GUIDE
+====================
+MySQL Version: 8.0 (Community Server)
+
+
+STEP 1 — Install MySQL
+-----------------------
+Download and install MySQL 8.0 Community Server from mysql.com.
+During installation, set a root password you will remember.
+
+
+STEP 2 — Create the Database
+------------------------------
+Open MySQL Workbench (or any MySQL client) and connect as root.
+Run the following SQL:
+
+    CREATE DATABASE sensor_readings;
+
+
+STEP 3 — Create the Table
+---------------------------
+Run the following SQL:
+
+    USE sensor_readings;
+
+    CREATE TABLE moisture_data (
+        id    INT AUTO_INCREMENT PRIMARY KEY,
+        value FLOAT NOT NULL
+    );
+
+
+STEP 4 — Create the User Account
+----------------------------------
+Run the following SQL:
+
+    CREATE USER 'Admin'@'%' IDENTIFIED WITH mysql_native_password BY 'rootapp';
+    GRANT ALL PRIVILEGES ON sensor_readings.* TO 'Admin'@'%';
+    FLUSH PRIVILEGES;
+
+
+STEP 5 — Update config.py
+---------------------------
+Open config.py in the app folder and set DB_HOST to the new
+machine's hostname or IP address. All other fields should remain
+the same as below:
+
+    DB_HOST     = "<new machine hostname or 127.0.0.1>"
+    DB_PORT     = 3306
+    DB_USER     = "Admin"
+    DB_PASSWORD = "rootapp"
+    DB_NAME     = "sensor_readings"
+    DB_TABLE    = "moisture_data"
+    COL_ID      = "id"
+    COL_VALUE   = "value"
+
+
+STEP 6 — Install Python Dependencies
+--------------------------------------
+Make sure Python 3 is installed, then run:
+
+    pip install mysql-connector-python
+
+
+STEP 7 — Run the App
+---------------------
+Double-click start.bat, or run in a terminal:
+
+    python app.py
+
+Then open a browser and go to:
+
+    http://localhost:5000
+
+
+NOTES
+------
+- The app reads all rows from moisture_data ordered by id (ascending).
+- New rows can be inserted by any external process (sensor script, etc.)
+  using: INSERT INTO moisture_data (value) VALUES (<reading>);
+- The dashboard auto-refreshes every 3 seconds.
