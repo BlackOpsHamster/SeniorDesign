@@ -19,18 +19,28 @@ def get_db():
     )
 
 
-def fetch_history():
+def fetch_history(data_type="moisture"):
+    if data_type == "temperature":
+        table   = config.TEMP_TABLE
+        col_id  = config.TEMP_COL_ID
+        col_val = config.TEMP_COL_VALUE
+    else:
+        table   = config.MOISTURE_TABLE
+        col_id  = config.MOISTURE_COL_ID
+        col_val = config.MOISTURE_COL_VALUE
+
     conn = get_db()
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
-        f"SELECT `{config.COL_ID}`, `{config.COL_VALUE}` "
-        f"FROM `{config.DB_TABLE}` "
-        f"ORDER BY `{config.COL_ID}` ASC"
+        f"SELECT `{col_id}`, `{col_val}` "
+        f"FROM `{table}` "
+        f"ORDER BY `{col_id}` DESC LIMIT 8"
     )
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
-    return rows
+    rows.reverse()
+    return rows, col_id, col_val
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -38,11 +48,15 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        if self.path == "/api/history":
+        if self.path.startswith("/api/history"):
+            from urllib.parse import urlparse, parse_qs
+            parsed = urlparse(self.path)
+            params = parse_qs(parsed.query)
+            data_type = params.get("type", ["moisture"])[0]
             try:
-                rows = fetch_history()
+                rows, col_id, col_val = fetch_history(data_type)
                 self._send_json([
-                    {"id": r[config.COL_ID], "value": r[config.COL_VALUE]}
+                    {"id": r[col_id], "value": r[col_val]}
                     for r in rows
                 ])
             except mysql.connector.Error as e:

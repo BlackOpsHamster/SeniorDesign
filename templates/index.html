@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Soil Moisture</title>
+  <title>Sensor Dashboard</title>
   <script src="/static/chart.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -21,10 +21,16 @@
 
     header {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       justify-content: space-between;
       padding: 18px 28px 10px;
       flex-shrink: 0;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
     }
 
     h1 {
@@ -34,6 +40,21 @@
       text-transform: uppercase;
       color: #888;
     }
+
+    #type-select {
+      background: #1a1f2e;
+      color: #ccc;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 0.85rem;
+      font-family: inherit;
+      cursor: pointer;
+      outline: none;
+    }
+
+    #type-select:hover { border-color: #555; }
+    #type-select:focus { border-color: #666; }
 
     #current {
       font-size: 2rem;
@@ -87,10 +108,16 @@
 </head>
 <body>
   <header>
-    <h1>🪴 Soil Moisture</h1>
+    <div class="header-left">
+      <h1 id="page-title">🪴 Soil Moisture</h1>
+      <select id="type-select">
+        <option value="moisture">Moisture</option>
+        <option value="temperature">Temperature</option>
+      </select>
+    </div>
     <div>
       <div style="font-size:0.75rem;color:#666;text-align:right;margin-bottom:2px;">AVG</div>
-      <div id="current">--<span> %</span></div>
+      <div id="current">--<span id="unit"> %</span></div>
     </div>
   </header>
 
@@ -105,6 +132,29 @@
 
   <script>
     const REFRESH_MS = 3000;
+
+    const MODES = {
+      moisture: {
+        label:      "Moisture",
+        unit:       " %",
+        title:      "🪴 Soil Moisture",
+        yAxisLabel: "Moisture (%)",
+        color:      "#4ecb6a",
+        colorAlpha: "rgba(78, 203, 106, 0.12)",
+        tooltipFmt: v => v.toFixed(1) + " %",
+        tickFmt:    v => v + " %",
+      },
+      temperature: {
+        label:      "Temperature",
+        unit:       " °C",
+        title:      "🌡️ Temperature",
+        yAxisLabel: "Temperature (°C)",
+        color:      "#e07b39",
+        colorAlpha: "rgba(224, 123, 57, 0.12)",
+        tooltipFmt: v => v.toFixed(1) + " °C",
+        tickFmt:    v => v + " °C",
+      },
+    };
 
     const ctx = document.getElementById("chart").getContext("2d");
 
@@ -138,7 +188,7 @@
             bodyFont: { size: 16, weight: "bold" },
             padding: 12,
             callbacks: {
-              label: ctx => ctx.parsed.y.toFixed(1) + " %"
+              label: c => c.parsed.y.toFixed(1) + " %"
             }
           }
         },
@@ -170,10 +220,40 @@
       }
     });
 
+    function applyMode(mode) {
+      const m = MODES[mode];
+      const ds = chart.data.datasets[0];
+
+      ds.label                = m.label;
+      ds.borderColor          = m.color;
+      ds.backgroundColor      = m.colorAlpha;
+      ds.pointBackgroundColor = m.color;
+
+      chart.options.plugins.tooltip.bodyColor      = m.color;
+      chart.options.plugins.tooltip.callbacks.label = c => m.tooltipFmt(c.parsed.y);
+      chart.options.scales.y.title.text            = m.yAxisLabel;
+      chart.options.scales.y.ticks.callback        = m.tickFmt;
+
+      document.getElementById("page-title").textContent = m.title;
+      document.getElementById("unit").textContent       = m.unit;
+    }
+
+    let currentMode = "moisture";
+
+    document.getElementById("type-select").addEventListener("change", function () {
+      currentMode = this.value;
+      applyMode(currentMode);
+      chart.data.labels = [];
+      chart.data.datasets[0].data = [];
+      chart.update();
+      document.getElementById("current").innerHTML = "--<span id='unit'>" + MODES[currentMode].unit + "</span>";
+      refresh();
+    });
+
     async function refresh() {
       let errorMsg = "no data — check connection";
       try {
-        const res = await fetch("/api/history");
+        const res = await fetch("/api/history?type=" + currentMode);
         const data = await res.json();
 
         if (!res.ok) {
@@ -189,8 +269,9 @@
         const avg = values.length
           ? values.reduce((a, b) => a + b, 0) / values.length
           : null;
+        const unit = MODES[currentMode].unit;
         document.getElementById("current").innerHTML =
-          (avg == null ? "--" : avg.toFixed(1)) + "<span> %</span>";
+          (avg == null ? "--" : avg.toFixed(1)) + "<span id='unit'>" + unit + "</span>";
 
         document.getElementById("dot").className = "dot live";
         document.getElementById("status-text").textContent =
